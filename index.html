@@ -341,19 +341,29 @@ table.matrix tr.linha-canal.aberta{ display:table-row; }
 table.matrix tr.linha-canal th.rowhead{ padding-left:18px; font-weight:500; color:var(--texto-sec); font-size:10.5px; }
 table.matrix td.cel-farol{ font-weight:700; min-width:46px; }
 table.matrix td.cel-farol .valor-venda{ display:block; font-size:9px; font-weight:600; opacity:.9; }
+/* Bolinha do farol ao lado do percentual — sem fundo colorido na célula, a cor
+   mora só no texto do percentual (classes farol-*) e nesta bolinha. Tamanho
+   reduzido aqui (a classe farol-dot padrão é maior) para acompanhar a fonte
+   pequena da matriz. */
+table.matrix td.cel-farol .farol-dot{ width:9.1px; height:9.1px; margin-left:3px; vertical-align:middle; }
 
 /* Coluna Total (soma do período inteiro por linha) — fixa à direita, sempre
    visível mesmo com a rolagem horizontal pelos dias do mês. */
 table.matrix td.cel-total{
   position:sticky; right:0; z-index:1;
+  background:var(--branco);
   border-left:2px solid var(--azul-inst);
   box-shadow:-2px 0 4px rgba(12,70,112,.10);
 }
 /* Linha Total (soma do período por dia/coluna) — fixa embaixo, sempre visível
    mesmo com a rolagem vertical pela lista de lojas. O canto (Total × Total) é
-   o mesmo valor consolidado exibido no card "Vendas do período". */
+   o mesmo valor consolidado exibido no card "Vendas do período". Como as
+   células da matriz não têm mais cor de fundo própria (só o texto/bolinha),
+   é preciso um fundo opaco explícito aqui — senão o conteúdo das linhas que
+   passam por baixo, ao rolar, ficaria visível por trás desta linha fixa. */
 table.matrix tr.linha-total th.rowhead, table.matrix tr.linha-total td{
   position:sticky; bottom:0;
+  background:var(--branco);
   border-top:2px solid var(--azul-inst);
 }
 table.matrix tr.linha-total th.rowhead{ z-index:4; background:var(--azul-inst); color:#fff; font-weight:800; }
@@ -1834,12 +1844,19 @@ function celulaMatriz({ meta, realizado, atingimento, cor, modoVendas, loja, can
   const pct = atingimento===null ? '—' : fmtPercentual(atingimento);
   const vendas = modoVendas ? `<span class="valor-venda">${(meta>0||realizado>0) ? fmtMoeda(realizado) : '—'}</span>` : '';
   const atingAttr = atingimento===null ? '' : atingimento;
-  const classes = `cel-farol farol-bg-${cor}${total ? ' cel-total' : ''}`;
+  // Sem preenchimento de fundo na célula: a cor do farol aparece só no texto do
+  // percentual (classes farol-*, já usadas em outros pontos do dashboard) e,
+  // para os 4 farróis reais (vermelho/amarelo/verde/azul), numa bolinha ao lado
+  // direito. Dias sem dado ("—") e o caso "neutro" ficam só no cinza apagado
+  // padrão de farol-vazio/farol-neutro, sem bolinha.
+  const temFarolReal = ['vermelho','amarelo','verde','azul'].includes(cor);
+  const bolinha = temFarolReal ? ` <span class="farol-dot farol-bg-${cor}" aria-hidden="true"></span>` : '';
+  const classes = `cel-farol${total ? ' cel-total' : ''}`;
   const rotuloPeriodo = total ? 'total do período' : fmtDataBR(data);
   return `<td class="${classes}" tabindex="0" role="button"
     aria-label="${escHtml(loja)}, ${escHtml(canal)}, ${rotuloPeriodo}, atingimento ${pct}"
     data-loja="${escHtml(loja)}" data-canal="${escHtml(canal)}" data-data="${total ? 'total' : data}"
-    data-meta="${meta}" data-realizado="${realizado}" data-atingimento="${atingAttr}">${vendas}${pct}</td>`;
+    data-meta="${meta}" data-realizado="${realizado}" data-atingimento="${atingAttr}">${vendas}<span class="farol-${cor}">${pct}</span>${bolinha}</td>`;
 }
 
 function renderMatriz(filtros, resultado){
