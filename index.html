@@ -313,8 +313,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
    (Balcão/Delivery), no lugar do texto simples anterior. */
 .canal-linha{ display:flex; align-items:center; gap:6px; margin-top:8px; }
 .canal-linha:first-of-type{ margin-top:6px; }
-.canal-icone{ flex-shrink:0; width:15px; height:15px; color:var(--texto-sec); }
-.canal-nome-linha{ font-size:11.5px; color:var(--texto-sec); width:46px; flex-shrink:0; }
+.canal-icone{ flex-shrink:0; width:20px; height:20px; color:var(--texto-sec); }
 .canal-trilho{ position:relative; flex:1 1 auto; height:7px; background:var(--cinza-claro); border-radius:999px; overflow:hidden; }
 .canal-fill{ position:absolute; left:0; top:0; bottom:0; border-radius:999px; }
 .canal-pct{ font-size:12.5px; font-weight:700; width:42px; text-align:right; flex-shrink:0; }
@@ -1466,23 +1465,23 @@ function renderKPIs(containerId, resultado, filtros){
     refsHtml: `
       <div class="canal-linha">
         <svg class="canal-icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M3 9l1-5h16l1 5"/>
-          <path d="M3 9a2 2 0 004 0 2 2 0 004 0 2 2 0 004 0 2 2 0 004 0"/>
-          <path d="M5 11v8h14v-8"/>
-          <path d="M9 19v-5h6v5"/>
+          <path d="M15 21v-5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5"/>
+          <path d="M17.774 10.31a1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.451 0 1.12 1.12 0 0 0-1.548 0 2.5 2.5 0 0 1-3.452 0 1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.77-3.248l2.889-4.184A2 2 0 0 1 7 2h10a2 2 0 0 1 1.653.873l2.895 4.192a2.5 2.5 0 0 1-3.774 3.244"/>
+          <path d="M4 10.95V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8.05"/>
         </svg>
-        <span class="canal-nome-linha">Balcão</span>
+        <span class="visually-hidden">Balcão</span>
         <div class="canal-trilho"><div class="canal-fill farol-bg-${corBalcao}" style="width:${pctBarraBalcao}%;"></div></div>
         <span class="canal-pct farol-${corBalcao}">${fmtPercentual(resultado.porCanal['Balcão'].atingimento)}</span>
       </div>
       <div class="canal-linha">
         <svg class="canal-icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="5.5" cy="18" r="2.2"/>
-          <circle cx="18.5" cy="18" r="2.2"/>
-          <path d="M7.5 18h7l2.5-5h-3"/>
-          <path d="M11.5 18l1.5-6H9.5l-2-3"/>
+          <path d="m18 14-1-3"/>
+          <path d="m3 9 6 2a2 2 0 0 1 2-2h2a2 2 0 0 1 1.99 1.81"/>
+          <path d="M8 17h3a1 1 0 0 0 1-1 6 6 0 0 1 6-6 1 1 0 0 0 1-1v-.75A5 5 0 0 0 17 5"/>
+          <circle cx="19" cy="17" r="3"/>
+          <circle cx="5" cy="17" r="3"/>
         </svg>
-        <span class="canal-nome-linha">Delivery</span>
+        <span class="visually-hidden">Delivery</span>
         <div class="canal-trilho"><div class="canal-fill farol-bg-${corDelivery}" style="width:${pctBarraDelivery}%;"></div></div>
         <span class="canal-pct farol-${corDelivery}">${fmtPercentual(resultado.porCanal['Delivery'].atingimento)}</span>
       </div>`
