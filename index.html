@@ -314,8 +314,17 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .canal-linha{ display:flex; align-items:center; gap:6px; margin-top:8px; }
 .canal-linha:first-of-type{ margin-top:6px; }
 .canal-icone{ flex-shrink:0; width:20px; height:20px; color:var(--texto-sec); }
-.canal-trilho{ position:relative; flex:1 1 auto; height:7px; background:var(--cinza-claro); border-radius:999px; overflow:hidden; }
+/* overflow visível de propósito: a largura do preenchimento já vem capada em
+   100% no JS, então não há necessidade de recortar — e assim o brilho
+   colorido da barra (.canal-fill) não fica cortado pelas bordas da trilha. */
+.canal-trilho{ position:relative; flex:1 1 auto; height:7px; background:var(--cinza-claro); border-radius:999px; overflow:visible; }
 .canal-fill{ position:absolute; left:0; top:0; bottom:0; border-radius:999px; }
+/* Leve brilho colorido contornando só a parte preenchida da barra (nunca a
+   trilha cinza), na mesma cor do farol daquele canal. */
+.canal-fill.farol-bg-vermelho{ box-shadow:0 0 6px 1px rgba(192,0,0,.55); }
+.canal-fill.farol-bg-amarelo{ box-shadow:0 0 6px 1px rgba(255,192,0,.55); }
+.canal-fill.farol-bg-verde{ box-shadow:0 0 6px 1px rgba(0,176,80,.55); }
+.canal-fill.farol-bg-azul{ box-shadow:0 0 6px 1px rgba(0,112,192,.55); }
 .canal-pct{ font-size:12.5px; font-weight:700; width:42px; text-align:right; flex-shrink:0; }
 
 /* Card "Projeção de fechamento": gauge em meio-círculo (180°, estilo
@@ -1428,7 +1437,7 @@ function renderKPIs(containerId, resultado, filtros){
   // exatamente como nos demais cards, + mini-gráfico diário à direita)
   const corHero = corFarol(resultado.atingimento);
   const serieDiariaHero = construirSerieDiariaRealizado(filtros, resultado.periodo, resultado.cutoff);
-  const svgHero = construirSparklineSvg(serieDiariaHero, FAROL_HEX[corHero]);
+  const svgHero = construirSparklineSvg(serieDiariaHero, FAROL_HEX[corHero], containerId);
   // Selo: variação do realizado do período atual vs. o período equivalente
   // anterior (mês anterior, ou janela deslizante quando o filtro abrange mais
   // de um mês — ver calcularVariacaoPeriodoAnterior). A cor do selo segue o
@@ -1492,11 +1501,11 @@ function renderKPIs(containerId, resultado, filtros){
   // do valor em texto simples anterior.
   let valorProjecao, refProjecao;
   if(resultado.periodo.multiMes){
-    valorProjecao = `<div class="gauge-wrap">${construirGaugeSvg(null, FAROL_HEX.neutro)}<div class="gauge-valor-dentro farol-neutro">—</div></div>`;
+    valorProjecao = `<div class="gauge-wrap">${construirGaugeSvg(null, FAROL_HEX.neutro, containerId)}<div class="gauge-valor-dentro farol-neutro">—</div></div>`;
     refProjecao = `<div class="kpi-ref">Selecione um único mês para projetar</div>`;
   } else {
     const corProj = corFarol(resultado.atingimentoProjetado);
-    valorProjecao = `<div class="gauge-wrap">${construirGaugeSvg(resultado.atingimentoProjetado, FAROL_HEX[corProj])}<div class="gauge-valor-dentro farol-${corProj}">${fmtMoedaCompacta(resultado.projecao)}</div></div>`;
+    valorProjecao = `<div class="gauge-wrap">${construirGaugeSvg(resultado.atingimentoProjetado, FAROL_HEX[corProj], containerId)}<div class="gauge-valor-dentro farol-${corProj}">${fmtMoedaCompacta(resultado.projecao)}</div></div>`;
     refProjecao = `<div class="kpi-ref">Meta mensal: <b>${fmtMoedaCompacta(resultado.metaMensal)}</b></div>`;
   }
   cards.push(criarKpiCard({
@@ -2230,7 +2239,10 @@ function construirPontosSuaves(pontos){
   }
   return d;
 }
-function construirSparklineSvg(valores, corHex){
+// idSufixo garante ids únicos de <linearGradient>/<filter> quando o mesmo
+// card é renderizado mais de uma vez na página (kpis-farol e kpis-ranking
+// simultâneos no DOM) — sem isso, os dois SVGs disputariam o mesmo id.
+function construirSparklineSvg(valores, corHex, idSufixo){
   if(!valores || valores.length < 2) return '';
   const larguraV = 200, alturaV = 56, padV = 6;
   const min = Math.min(...valores), max = Math.max(...valores);
@@ -2239,8 +2251,21 @@ function construirSparklineSvg(valores, corHex){
     x: (i/(valores.length-1)) * larguraV,
     y: faixa > 0 ? (alturaV-padV) - ((v-min)/faixa) * (alturaV-padV*2) : alturaV/2
   }));
+  const linhaD = construirPontosSuaves(pontos);
+  // Área preenchida sob a linha: mesmo traçado da linha, fechado descendo até
+  // a base do viewBox — preenchida com um degradê (mesmo tom da linha, mais
+  // visível perto dela e sumindo até transparente na base).
+  const areaD = `${linhaD} L ${pontos[pontos.length-1].x},${alturaV} L ${pontos[0].x},${alturaV} Z`;
+  const gradId = `grad-sparkline-${idSufixo}`;
   return `<svg viewBox="0 0 ${larguraV} ${alturaV}" preserveAspectRatio="none" aria-hidden="true">
-    <path d="${construirPontosSuaves(pontos)}" fill="none" stroke="${corHex}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+    <defs>
+      <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${corHex}" stop-opacity="0.32"/>
+        <stop offset="100%" stop-color="${corHex}" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    <path d="${areaD}" fill="url(#${gradId})" stroke="none"/>
+    <path d="${linhaD}" fill="none" stroke="${corHex}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
   </svg>`;
 }
 
@@ -2252,17 +2277,30 @@ function construirSparklineSvg(valores, corHex){
 // arco — a forma física do semicírculo não comporta mais que 100%, mesmo que
 // o valor real (mostrado como texto) ultrapasse a meta. pct null/inválido
 // desenha o arco zerado (só o traço cinza), usado no estado "sem projeção".
-function construirGaugeSvg(pct, corHex){
-  const r = 50, cx = 60, cyBase = 58, sw = 12;
+// Um leve brilho (feGaussianBlur) contorna só o traço colorido — nunca o
+// traço cinza de fundo — na própria cor do arco.
+function construirGaugeSvg(pct, corHex, idSufixo){
+  const r = 50, cx = 60, cyBase = 58, sw = 9;
   const circMeio = Math.PI * r;
   const pctValido = (pct===null || pct===undefined || !isFinite(pct)) ? 0 : pct;
   const pctClamp = Math.max(0, Math.min(1, pctValido));
   const offset = circMeio * (1 - pctClamp);
   const d = `M ${cx-r} ${cyBase} A ${r} ${r} 0 0 1 ${cx+r} ${cyBase}`;
-  return `<svg width="120" height="62" viewBox="0 0 120 62" aria-hidden="true">
+  const filtroId = `brilho-gauge-${idSufixo}`;
+  return `<svg width="120" height="62" viewBox="0 0 120 62" aria-hidden="true" style="overflow:visible;">
+    <defs>
+      <filter id="${filtroId}" x="-60%" y="-60%" width="220%" height="220%">
+        <feGaussianBlur stdDeviation="2.1" result="blur"/>
+        <feMerge>
+          <feMergeNode in="blur"/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+      </filter>
+    </defs>
     <path d="${d}" fill="none" stroke="var(--cinza-claro)" stroke-width="${sw}" stroke-linecap="round"/>
     <path d="${d}" fill="none" stroke="${corHex}" stroke-width="${sw}" stroke-linecap="round"
-      stroke-dasharray="${circMeio.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}"/>
+      stroke-dasharray="${circMeio.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}"
+      filter="url(#${filtroId})"/>
   </svg>`;
 }
 
