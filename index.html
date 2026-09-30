@@ -445,7 +445,7 @@ table.matrix tr.linha-total th.rowhead, table.matrix tr.linha-total td{
   background:var(--branco);
   border-top:2px solid var(--azul-inst);
 }
-table.matrix tr.linha-total th.rowhead{ z-index:4; background:var(--azul-inst); color:#fff; font-weight:800; }
+table.matrix tr.linha-total th.rowhead{ z-index:4; background:var(--branco); color:var(--azul-inst); font-weight:800; }
 table.matrix tr.linha-total td{ z-index:2; }
 table.matrix tr.linha-total td.cel-total{ z-index:3; }
 .chev{ transition:transform var(--dur) var(--ease); flex-shrink:0; }
@@ -775,9 +775,17 @@ table.matrix tr.linha-total td.cel-total{ z-index:3; }
 
     <!-- Evolução acumulada -->
     <section class="card" aria-labelledby="titulo-evolucao">
-      <h2 class="section-title" id="titulo-evolucao">Evolução acumulada no mês</h2>
-      <p class="section-sub">Realizado até a última data disponível vs meta.</p>
-      <div class="chart-box" style="height:230px;"><canvas id="chart-evolucao" role="img" aria-label="Gráfico de linhas com meta acumulada, realizado acumulado e tendência"></canvas></div>
+      <div class="section-header-row">
+        <div>
+          <h2 class="section-title" id="titulo-evolucao">Evolução acumulada no mês</h2>
+          <p class="section-sub" id="subtitulo-evolucao">Realizado até a última data disponível vs meta.</p>
+        </div>
+        <div class="segmented" role="group" aria-label="Modo de exibição do gráfico de evolução">
+          <button type="button" id="btn-evolucao-acumulado" class="ativo" aria-pressed="true">Acumulado</button>
+          <button type="button" id="btn-evolucao-diario" aria-pressed="false">Diário</button>
+        </div>
+      </div>
+      <div class="chart-box" style="height:230px;"><canvas id="chart-evolucao" role="img" aria-label="Gráfico de linhas com meta, realizado e tendência"></canvas></div>
     </section>
 
     <!-- Composição do déficit -->
@@ -1021,6 +1029,7 @@ const state = {
     matrizGruposAbertos: new Set(),
     matrizScrollLeft: 0,
     matrizOrdenacao: 'atingimento',      // 'atingimento' | 'vendas'
+    evolucaoModo: 'acumulado',          // 'acumulado' | 'diario'
     rankingModo: 'loja',                // 'loja' | 'lojaCanal'
     rankingBusca: '',
     rankingOrdenacao: 'atingimento',    // 'atingimento' | 'vendas'
@@ -1839,7 +1848,7 @@ function renderChartComposicao(resultado){
 }
 
 // ---- Gráfico 2: Evolução acumulada no mês ----
-function construirSerieEvolucao(filtros, periodo, cutoff){
+function construirSerieEvolucao(filtros, periodo, cutoff, modo){
   const mesUnico = periodo.mesUnico;
   const totalDias = diasDoMes(mesUnico);
   const setLojas = filtros.lojas.length ? new Set(filtros.lojas) : null;
@@ -1859,6 +1868,21 @@ function construirSerieEvolucao(filtros, periodo, cutoff){
   let metaAteCutoff=0, realAteCutoff=0;
   for(let d=1; d<=cutoffDia; d++){ metaAteCutoff+=metaPorDia[d]; realAteCutoff+=realPorDia[d]; }
   const ritmo = metaAteCutoff>0 ? realAteCutoff/metaAteCutoff : null;
+
+  // Modo 'diario': mesmo comportamento do 'acumulado' (mesma tendência, mesmo
+  // critério de corte), só que os valores de cada dia não são somados aos
+  // dias anteriores — cada ponto reflete apenas o próprio dia.
+  if(modo === 'diario'){
+    const metaSerie=[], realSerie=[], tendencia=[];
+    for(let d=1; d<=totalDias; d++){
+      metaSerie.push(metaPorDia[d]);
+      realSerie.push(d<=cutoffDia ? realPorDia[d] : null);
+      if(d<cutoffDia) tendencia.push(null);
+      else if(d===cutoffDia) tendencia.push(cutoffDia>0 ? realPorDia[d] : null);
+      else tendencia.push(ritmo===null ? null : metaPorDia[d]*ritmo);
+    }
+    return { totalDias, cutoffDia, metaAcum:metaSerie, realAcum:realSerie, tendencia };
+  }
 
   const metaAcum=[], realAcum=[], tendencia=[];
   let accMeta=0, accReal=0;
@@ -1886,14 +1910,29 @@ function renderChartEvolucao(filtros, resultado){
     const div = document.createElement('div');
     div.className = 'mensagem-info evolucao-msg';
     div.textContent = resultado.semPeriodo
-      ? 'Selecione um mês para ver a evolução acumulada.'
-      : 'Selecione um único mês para ver a evolução acumulada e a tendência.';
+      ? 'Selecione um mês para ver a evolução.'
+      : 'Selecione um único mês para ver a evolução e a tendência.';
     canvas.insertAdjacentElement('beforebegin', div);
     return;
   }
   canvas.style.display = '';
 
-  const serie = construirSerieEvolucao(filtros, resultado.periodo, resultado.cutoff);
+  const modo = state.ui.evolucaoModo;
+  const ehDiario = modo === 'diario';
+
+  // Título, subtítulo e rótulos das séries mudam conforme a chave selecionada;
+  // o cálculo, as cores e o restante da formatação são idênticos nos dois modos.
+  document.getElementById('titulo-evolucao').textContent = ehDiario ? 'Evolução diária no mês' : 'Evolução acumulada no mês';
+  document.getElementById('subtitulo-evolucao').textContent = ehDiario
+    ? 'Realizado diário vs meta diária, com tendência.'
+    : 'Realizado até a última data disponível vs meta.';
+  canvas.setAttribute('aria-label', ehDiario
+    ? 'Gráfico de linhas com meta diária, realizado diário e tendência'
+    : 'Gráfico de linhas com meta acumulada, realizado acumulado e tendência');
+  const labelMeta = ehDiario ? 'Meta diária' : 'Meta acumulada';
+  const labelReal = ehDiario ? 'Realizado diário' : 'Realizado acumulado';
+
+  const serie = construirSerieEvolucao(filtros, resultado.periodo, resultado.cutoff, modo);
   const labels = Array.from({length: serie.totalDias}, (_,i)=> String(i+1));
 
   // Realizado e Tendência (a tendência é a continuação do realizado) recebem UMA
@@ -1902,21 +1941,11 @@ function renderChartEvolucao(filtros, resultado){
   // variação de cor dia a dia: a linha toda muda de cor conforme o atingimento geral.
   const corRealizadoTendenciaHex = FAROL_HEX[corFarol(resultado.atingimento)];
 
-  // Selos seguem a cor da própria linha (Meta = azul institucional fixo;
-  // Tendência/Realizado = cor do farol). O afastamento vertical (offsetY) é
-  // grande o bastante para o selo ficar sempre fora da faixa das linhas — o
-  // da Meta bem acima da sua própria linha, o da Tendência bem abaixo da
-  // sua — evitando que qualquer uma delas passe por baixo do selo. Os pontos
-  // do último dia (iFim) ficam na borda direita do gráfico, então usam
-  // alinhamento à direita para o selo não ser cortado pela lateral do canvas.
-  const pontos = [];
-  const iCutoff = serie.cutoffDia-1, iFim = serie.totalDias-1;
-  if(iCutoff>=0){
-    pontos.push({ datasetIndex:0, index:iCutoff, texto:fmtMoedaCompacta(serie.metaAcum[iCutoff]), cor:'#0C4670', offsetY:18 });
-    if(serie.tendencia[iCutoff]!==null) pontos.push({ datasetIndex:2, index:iCutoff, texto:fmtMoedaCompacta(serie.tendencia[iCutoff]), cor:corRealizadoTendenciaHex, offsetY:-16 });
-  }
-  pontos.push({ datasetIndex:0, index:iFim, texto:fmtMoedaCompacta(serie.metaAcum[iFim]), cor:'#0C4670', offsetY:18, alinhar:'direita' });
-  if(serie.tendencia[iFim]!==null) pontos.push({ datasetIndex:2, index:iFim, texto:fmtMoedaCompacta(serie.tendencia[iFim]), cor:corRealizadoTendenciaHex, offsetY:-16, alinhar:'direita' });
+  // Os selos fixos de valor (dia do corte / último dia) foram removidos —
+  // no fim do mês eles se sobrepunham onde a linha do realizado encontra a
+  // borda direita do gráfico. O detalhamento agora é exibido só no toque,
+  // pelo tooltip nativo (callbacks abaixo), com uma bolinha bem visível
+  // marcando o ponto ativo em cada linha (pointHoverRadius/-BorderWidth).
 
   graficos.evolucao = new Chart(canvas, {
     type:'line',
@@ -1930,11 +1959,14 @@ function renderChartEvolucao(filtros, resultado){
         // torta. O tracejado exato da Tendência é redesenhado à parte, no
         // plugin legendaTracejadaPlugin (ver acima), por cima do selo nativo
         // (que fica invisível para essa série via generateLabels abaixo).
-        { label:'Meta acumulada', data:serie.metaAcum, borderColor:'#0C4670', backgroundColor:'#0C4670', borderWidth:2, pointRadius:0, pointStyle:'line', tension:0.15, spanGaps:true },
-        // Realizado acumulado: cor única (farol do atingimento geral consolidado).
-        { label:'Realizado acumulado', data:serie.realAcum, borderColor:corRealizadoTendenciaHex, backgroundColor:corRealizadoTendenciaHex, borderWidth:2.5, pointRadius:0, pointStyle:'line', tension:0.15, spanGaps:false },
+        { label:labelMeta, data:serie.metaAcum, borderColor:'#0C4670', backgroundColor:'#0C4670', borderWidth:2, pointRadius:0, tension:0.15, spanGaps:true,
+          pointHoverRadius:6, pointHoverBackgroundColor:'#0C4670', pointHoverBorderColor:'#fff', pointHoverBorderWidth:2 },
+        // Realizado: cor única (farol do atingimento geral consolidado).
+        { label:labelReal, data:serie.realAcum, borderColor:corRealizadoTendenciaHex, backgroundColor:corRealizadoTendenciaHex, borderWidth:2.5, pointRadius:0, tension:0.15, spanGaps:false,
+          pointHoverRadius:6, pointHoverBackgroundColor:corRealizadoTendenciaHex, pointHoverBorderColor:'#fff', pointHoverBorderWidth:2 },
         // Tendência: continuação do realizado — mesma cor única.
-        { label:'Tendência', data:serie.tendencia, borderColor:corRealizadoTendenciaHex, backgroundColor:corRealizadoTendenciaHex, borderWidth:2, borderDash:[6,4], pointRadius:0, pointStyle:'line', tension:0.15, spanGaps:false }
+        { label:'Tendência', data:serie.tendencia, borderColor:corRealizadoTendenciaHex, backgroundColor:corRealizadoTendenciaHex, borderWidth:2, borderDash:[6,4], pointRadius:0, tension:0.15, spanGaps:false,
+          pointHoverRadius:6, pointHoverBackgroundColor:corRealizadoTendenciaHex, pointHoverBorderColor:'#fff', pointHoverBorderWidth:2 }
       ]
     },
     options:{
@@ -1946,18 +1978,23 @@ function renderChartEvolucao(filtros, resultado){
       // quando a linha da Meta acumulada chega perto do topo do gráfico.
       layout:{ padding:{ top:20, right:4 } },
       plugins:{
-        // usePointStyle + pointStyle:'line' (definido em cada dataset acima):
-        // a legenda desenha uma linha de verdade para Meta acumulada e
-        // Realizado acumulado, em vez do retângulo padrão do Chart.js. Para a
-        // Tendência, o selo nativo é deixado invisível (generateLabels
-        // abaixo) e o traço tracejado exato é desenhado por cima pelo
-        // legendaTracejadaPlugin, com o mesmo padrão [6,4] da linha real.
+        // usePointStyle + pointStyle:'line' forçado aqui (só na legenda, via
+        // generateLabels) desenha uma linha de verdade para Meta acumulada e
+        // Realizado acumulado, em vez do retângulo padrão do Chart.js. O
+        // dataset em si NÃO usa pointStyle:'line' (ficaria com esse formato
+        // também no ponto ativo do toque) — assim o marcador de hover
+        // (pointHoverRadius) é desenhado como círculo. Para a Tendência, o
+        // selo nativo é deixado invisível (generateLabels abaixo) e o traço
+        // tracejado exato é desenhado por cima pelo legendaTracejadaPlugin,
+        // com o mesmo padrão [6,4] da linha real.
         legend:{
           position:'bottom',
           labels:{
             usePointStyle:true, pointStyleWidth:30, boxHeight:6, padding:12, font:{ size:11 },
             generateLabels:(chart)=>{
               const itens = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+              if(itens[0]) itens[0].pointStyle = 'line';
+              if(itens[1]) itens[1].pointStyle = 'line';
               const tendenciaItem = itens[2];
               if(tendenciaItem){ tendenciaItem.fillStyle = 'rgba(0,0,0,0)'; tendenciaItem.strokeStyle = 'rgba(0,0,0,0)'; }
               return itens;
@@ -1971,7 +2008,6 @@ function renderChartEvolucao(filtros, resultado){
             label:(item)=> `${item.dataset.label}: ${fmtMoedaCompacta(item.parsed.y)}`
           }
         },
-        rotulosCustom:{ pontos },
         legendaTracejada:{ datasetIndex:2, cor:corRealizadoTendenciaHex, dash:[6,4], lineWidth:2, larguraTraco:30 }
       },
       scales:{
@@ -2933,6 +2969,24 @@ function configurarEventos(){
     btnModoVendas.classList.add('ativo'); btnModoVendas.setAttribute('aria-pressed','true');
     btnModoPct.classList.remove('ativo'); btnModoPct.setAttribute('aria-pressed','false');
     renderMatriz(state.filtros, calcularResultadoConsolidado(state.filtros));
+  });
+
+  // Segmentado: modo do gráfico de evolução (acumulado/diário)
+  const btnEvolucaoAcumulado = document.getElementById('btn-evolucao-acumulado');
+  const btnEvolucaoDiario = document.getElementById('btn-evolucao-diario');
+  btnEvolucaoAcumulado.addEventListener('click', ()=>{
+    if(state.ui.evolucaoModo==='acumulado') return;
+    state.ui.evolucaoModo = 'acumulado';
+    btnEvolucaoAcumulado.classList.add('ativo'); btnEvolucaoAcumulado.setAttribute('aria-pressed','true');
+    btnEvolucaoDiario.classList.remove('ativo'); btnEvolucaoDiario.setAttribute('aria-pressed','false');
+    renderChartEvolucao(state.filtros, calcularResultadoConsolidado(state.filtros));
+  });
+  btnEvolucaoDiario.addEventListener('click', ()=>{
+    if(state.ui.evolucaoModo==='diario') return;
+    state.ui.evolucaoModo = 'diario';
+    btnEvolucaoDiario.classList.add('ativo'); btnEvolucaoDiario.setAttribute('aria-pressed','true');
+    btnEvolucaoAcumulado.classList.remove('ativo'); btnEvolucaoAcumulado.setAttribute('aria-pressed','false');
+    renderChartEvolucao(state.filtros, calcularResultadoConsolidado(state.filtros));
   });
 
   // Grupos expansíveis da matriz (delegação de evento)
